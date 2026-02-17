@@ -1,9 +1,5 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.17)
 project(optix_mwe LANGUAGES C CXX CUDA)
-
-# FindCUDA is technically deprecated but provides cuda_add_library(PTX ...)
-# which is very convenient for OptiX PTX generation.
-find_package(CUDA REQUIRED)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,25 +7,35 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # User should set OptiX_INSTALL_DIR to the location of the OptiX SDK
 set(OptiX_INSTALL_DIR "" CACHE PATH "Path to OptiX SDK")
 
-if(NOT OptiX_INSTALL_DIR)
-    message(WARNING "OptiX_INSTALL_DIR not set. Compilation might fail.")
+include_directories(${PROJECT_SOURCE_DIR}/include)
+set(OPTIX_INCLUDE "")
+if(OptiX_INSTALL_DIR)
+    include_directories(${OptiX_INSTALL_DIR}/include)
+    set(OPTIX_INCLUDE "-I${OptiX_INSTALL_DIR}/include")
 endif()
 
-include_directories(
-    ${PROJECT_SOURCE_DIR}/include
-    ${OptiX_INSTALL_DIR}/include
-    ${CUDA_INCLUDE_DIRS}
+# Manual PTX generation using the CUDA compiler identified by CMake
+set(PTX_FILE "${CMAKE_CURRENT_BINARY_DIR}/device_programs.ptx")
+add_custom_command(
+    OUTPUT "${PTX_FILE}"
+    COMMAND ${CMAKE_CUDA_COMPILER} -ptx
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/device_programs.cu"
+            -o "${PTX_FILE}"
+            -I"${CMAKE_CURRENT_SOURCE_DIR}/include"
+            ${OPTIX_INCLUDE}
+            -arch=sm_60
+    DEPENDS src/device_programs.cu include/common.h
+    VERBATIM
 )
-
-# Device code
-# Note: OptiX PTX generation usually requires -nvvm flag for modern OptiX
-# but -ptx is standard for generating PTX.
-set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -arch=sm_60 -ptx")
-cuda_add_library(device_programs PTX src/device_programs.cu)
+add_custom_target(generate_ptx ALL DEPENDS "${PTX_FILE}")
 
 # Host code
 add_executable(optix_mwe src/main.cpp)
-target_link_libraries(optix_mwe ${CUDA_LIBRARIES} ${CUDA_CUDA_LIBRARY})
+add_dependencies(optix_mwe generate_ptx)
 
-# Note: In OptiX 7, you often need to include optix_stubs.h and link against cuda
-# The optix_stubs.h is usually included in the main.cpp as I did.
+# Use CUDAToolkit for modern CUDA library linking
+find_package(CUDAToolkit REQUIRED)
+target_link_libraries(optix_mwe PRIVATE CUDA::cudart CUDA::cuda)
+
+# Define the absolute path to the PTX file for the host code
+target_compile_definitions(optix_mwe PRIVATE OPTIX_PTX_PATH="${PTX_FILE}")

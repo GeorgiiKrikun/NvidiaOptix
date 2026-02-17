@@ -70,9 +70,14 @@ void createPipeline(OptixDeviceContext context, OptixPipeline& pipeline, OptixMo
     pipeline_compile_options.pipelineLaunchParamsVariableName = "params";
 
     // Load PTX from file
-    std::ifstream ptx_file("device_programs.ptx");
+#ifdef OPTIX_PTX_PATH
+    std::string ptx_path = OPTIX_PTX_PATH;
+#else
+    std::string ptx_path = "device_programs.ptx";
+#endif
+    std::ifstream ptx_file(ptx_path);
     if (!ptx_file.is_open()) {
-        std::cerr << "Failed to open device_programs.ptx" << std::endl;
+        std::cerr << "Failed to open " << ptx_path << std::endl;
         exit(1);
     }
     std::string ptx((std::istreambuf_iterator<char>(ptx_file)), std::istreambuf_iterator<char>());
