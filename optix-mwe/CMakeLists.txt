@@ -35,7 +35,20 @@ add_dependencies(optix_mwe generate_ptx)
 
 # Use CUDAToolkit for modern CUDA library linking
 find_package(CUDAToolkit REQUIRED)
-target_link_libraries(optix_mwe PRIVATE CUDA::cudart CUDA::cuda)
+target_link_libraries(optix_mwe PRIVATE CUDA::cudart)
+
+# Link against CUDA driver library (libcuda.so)
+if(TARGET CUDA::cuda_driver)
+    target_link_libraries(optix_mwe PRIVATE CUDA::cuda_driver)
+elseif(TARGET CUDA::cuda)
+    target_link_libraries(optix_mwe PRIVATE CUDA::cuda)
+else()
+    # Fallback to finding it manually
+    find_library(CUDA_DRIVER_LIB cuda)
+    if(CUDA_DRIVER_LIB)
+        target_link_libraries(optix_mwe PRIVATE ${CUDA_DRIVER_LIB})
+    endif()
+endif()
 
 # Define the absolute path to the PTX file for the host code
 target_compile_definitions(optix_mwe PRIVATE OPTIX_PTX_PATH="${PTX_FILE}")
