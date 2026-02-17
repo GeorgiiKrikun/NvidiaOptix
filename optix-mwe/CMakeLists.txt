@@ -7,12 +7,23 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # User should set OptiX_INSTALL_DIR to the location of the OptiX SDK
 set(OptiX_INSTALL_DIR "" CACHE PATH "Path to OptiX SDK")
 
-include_directories(${PROJECT_SOURCE_DIR}/include)
-set(OPTIX_INCLUDE "")
-if(OptiX_INSTALL_DIR)
-    include_directories(${OptiX_INSTALL_DIR}/include)
-    set(OPTIX_INCLUDE "-I${OptiX_INSTALL_DIR}/include")
+# Try to find optix.h
+find_path(OptiX_INCLUDE_DIR optix.h
+    HINTS "${OptiX_INSTALL_DIR}"
+    PATH_SUFFIXES include
+)
+
+if(NOT OptiX_INCLUDE_DIR)
+    message(FATAL_ERROR
+        "OptiX headers not found! Please set OptiX_INSTALL_DIR to your OptiX SDK location "
+        "or set OptiX_INCLUDE_DIR directly to the directory containing optix.h."
+    )
 endif()
+
+message(STATUS "Found OptiX headers: ${OptiX_INCLUDE_DIR}")
+
+include_directories(${PROJECT_SOURCE_DIR}/include)
+include_directories(${OptiX_INCLUDE_DIR})
 
 # Manual PTX generation using the CUDA compiler identified by CMake
 set(PTX_FILE "${CMAKE_CURRENT_BINARY_DIR}/device_programs.ptx")
@@ -22,7 +33,7 @@ add_custom_command(
             "${CMAKE_CURRENT_SOURCE_DIR}/src/device_programs.cu"
             -o "${PTX_FILE}"
             -I"${CMAKE_CURRENT_SOURCE_DIR}/include"
-            ${OPTIX_INCLUDE}
+            -I"${OptiX_INCLUDE_DIR}"
             -arch=sm_60
     DEPENDS src/device_programs.cu include/common.h
     VERBATIM
